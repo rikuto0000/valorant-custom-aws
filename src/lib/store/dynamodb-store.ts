@@ -21,7 +21,7 @@ export class DynamoDBStore implements IDataStore {
 
   constructor() {
     const client = new DynamoDBClient({
-      region: process.env.AWS_REGION,
+      region: process.env.APP_AWS_REGION,
     });
     this.docClient = DynamoDBDocumentClient.from(client);
     this.roomsTable = process.env.DYNAMODB_ROOMS_TABLE_NAME ?? 'Rooms';
