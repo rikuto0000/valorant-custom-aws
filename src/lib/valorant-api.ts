@@ -32,7 +32,6 @@ interface HenrikMMRResponse {
 
 const HENRIK_API_BASE = 'https://api.henrikdev.xyz';
 const DEFAULT_REGION = 'ap';
-const DEFAULT_PLATFORM = 'pc';
 
 /**
  * Henrik-3 API 経由でプレイヤーのランク情報を取得する。
@@ -57,14 +56,16 @@ export async function resolveRank(
 }
 
 /**
- * Henrik-3 API v3 MMR エンドポイントからプレイヤー情報を取得する
+/**
+ * Henrik-3 API v2 MMR エンドポイントからプレイヤー情報を取得する
  */
 async function fetchFromHenrikAPI(
   name: string,
   tag: string,
   apiKey: string
 ): Promise<ValorantPlayerInfo> {
-  const url = `${HENRIK_API_BASE}/valorant/v3/mmr/${DEFAULT_REGION}/${DEFAULT_PLATFORM}/${encodeURIComponent(name)}/${encodeURIComponent(tag)}`;
+  // v2 エンドポイントを使用（v3 はレスポンス構造が異なるため）
+  const url = `${HENRIK_API_BASE}/valorant/v2/mmr/${DEFAULT_REGION}/${encodeURIComponent(name)}/${encodeURIComponent(tag)}`;
 
   const response = await fetch(url, {
     headers: {
@@ -83,16 +84,18 @@ async function fetchFromHenrikAPI(
     throw new Error('Henrik API returned no data');
   }
 
-  const currentTier = json.data.current_data?.currenttier;
-  const currentRank = currentTier != null
-    ? getRankByValue(currentTier)
+  // Henrik API の tier ID (3=Iron1 ... 27=Radiant) → うちの value (1〜25) に変換
+  const currentTierId = json.data.current_data?.currenttier;
+  const currentRank = currentTierId != null && currentTierId >= 3
+    ? getRankByValue(currentTierId - 2)
     : undefined;
 
-  const peakTier = json.data.highest_rank?.tier;
-  const peakRank = peakTier != null
-    ? getRankByValue(peakTier)
+  const peakTierId = json.data.highest_rank?.tier;
+  const peakRank = peakTierId != null && peakTierId >= 3
+    ? getRankByValue(peakTierId - 2)
     : undefined;
 
+  // currenttierpatched が "Gold 2" のような文字列を返すので、それも使える
   const resolvedCurrentRank = currentRank ?? DEFAULT_RANK;
   const resolvedPeakRank = peakRank ?? resolvedCurrentRank;
 
@@ -100,12 +103,13 @@ async function fetchFromHenrikAPI(
     name: json.data.name ?? name,
     tag: json.data.tag ?? tag,
     displayName: `${json.data.name ?? name}#${json.data.tag ?? tag}`,
-    rank: resolvedCurrentRank.label,
+    rank: json.data.current_data?.currenttierpatched ?? resolvedCurrentRank.label,
     rankValue: resolvedCurrentRank.value,
-    peakRank: resolvedPeakRank.label,
+    peakRank: json.data.highest_rank?.patched_tier ?? resolvedPeakRank.label,
     peakRankValue: resolvedPeakRank.value,
   };
 }
+
 
 /**
  * デモモード: ランダムなランク情報を生成する。
