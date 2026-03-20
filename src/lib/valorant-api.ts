@@ -13,6 +13,8 @@ export interface ValorantPlayerInfo {
   peakRankValue: number;
   /** データ取得元: 'api' = Henrik API, 'demo' = デモモード（ランダム生成） */
   source: 'api' | 'demo';
+  /** デバッグ用: フォールバック理由（本番では削除） */
+  _debug?: string;
 }
 
 /** Henrik-3 API v2 MMR レスポンスの型定義 */
@@ -46,15 +48,19 @@ export async function resolveRank(
   const apiKey = process.env.VALORANT_API_KEY;
 
   if (!apiKey) {
-    return generateDemoPlayerInfo(name, tag);
+    const demo = generateDemoPlayerInfo(name, tag);
+    demo._debug = 'NO_API_KEY';
+    return demo;
   }
 
   try {
     return await fetchFromHenrikAPI(name, tag, apiKey);
   } catch (err) {
-    // API エラー時はデモモードにフォールバック（原因をログに残す）
-    console.error('[Valorant API] フォールバック発生:', err instanceof Error ? err.message : err);
-    return generateDemoPlayerInfo(name, tag);
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[Valorant API] フォールバック発生:', message);
+    const demo = generateDemoPlayerInfo(name, tag);
+    demo._debug = message;
+    return demo;
   }
 }
 
