@@ -11,6 +11,8 @@ export interface ValorantPlayerInfo {
   rankValue: number;
   peakRank: string;
   peakRankValue: number;
+  /** データ取得元: 'api' = Henrik API, 'demo' = デモモード（ランダム生成） */
+  source: 'api' | 'demo';
 }
 
 /** Henrik-3 API v2 MMR レスポンスの型定義 */
@@ -49,13 +51,13 @@ export async function resolveRank(
 
   try {
     return await fetchFromHenrikAPI(name, tag, apiKey);
-  } catch {
-    // API エラー時はデモモードにフォールバック
+  } catch (err) {
+    // API エラー時はデモモードにフォールバック（原因をログに残す）
+    console.error('[Valorant API] フォールバック発生:', err instanceof Error ? err.message : err);
     return generateDemoPlayerInfo(name, tag);
   }
 }
 
-/**
 /**
  * Henrik-3 API v2 MMR エンドポイントからプレイヤー情報を取得する
  */
@@ -75,7 +77,8 @@ async function fetchFromHenrikAPI(
   });
 
   if (!response.ok) {
-    throw new Error(`Henrik API error: ${response.status}`);
+    const body = await response.text().catch(() => '');
+    throw new Error(`Henrik API error: ${response.status} ${body}`);
   }
 
   const json: HenrikMMRResponse = await response.json();
@@ -107,6 +110,7 @@ async function fetchFromHenrikAPI(
     rankValue: resolvedCurrentRank.value,
     peakRank: json.data.highest_rank?.patched_tier ?? resolvedPeakRank.label,
     peakRankValue: resolvedPeakRank.value,
+    source: 'api',
   };
 }
 
@@ -136,5 +140,6 @@ export function generateDemoPlayerInfo(
     rankValue: currentRank.value,
     peakRank: peakRank.label,
     peakRankValue: peakRank.value,
+    source: 'demo',
   };
 }

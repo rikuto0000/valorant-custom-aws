@@ -28,6 +28,7 @@ export function PlayerForm({ roomId, onPlayerAdded }: PlayerFormProps) {
 
   // API mode state
   const [riotId, setRiotId] = useState("");
+  const [demoWarning, setDemoWarning] = useState(false);
 
   // Manual mode state
   const [displayName, setDisplayName] = useState("");
@@ -74,6 +75,14 @@ export function PlayerForm({ roomId, onPlayerAdded }: PlayerFormProps) {
       }
 
       const info = apiJson.data;
+
+      // API取得失敗でデモモードにフォールバックした場合は警告表示
+      if (info.source === 'demo') {
+        setDemoWarning(true);
+      } else {
+        setDemoWarning(false);
+      }
+
       const playerInput: PlayerInput = {
         riot_id: `${info.name}#${info.tag}`,
         display_name: info.displayName ?? `${info.name}#${info.tag}`,
@@ -240,6 +249,12 @@ export function PlayerForm({ roomId, onPlayerAdded }: PlayerFormProps) {
 
           {error && (
             <p className="text-sm text-val-red">{error}</p>
+          )}
+
+          {demoWarning && (
+            <p className="text-sm text-yellow-400">
+              ⚠ API取得に失敗したため、ランダムなランクが割り当てられました。手動入力で修正できます。
+            </p>
           )}
 
           <Button type="submit" className="w-full" disabled={loading}>

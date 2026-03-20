@@ -60,6 +60,7 @@ describe('GET /api/valorant', () => {
       rankValue: 11,
       peakRank: 'Platinum 1',
       peakRankValue: 13,
+      source: 'api' as const,
     };
     mockResolveRank.mockResolvedValue(mockPlayerInfo);
 
@@ -93,6 +94,7 @@ describe('GET /api/valorant', () => {
       rankValue: 8,
       peakRank: 'Silver 2',
       peakRankValue: 8,
+      source: 'api' as const,
     });
 
     const request = createRequest({ name: 'Player', tag: 'TAG' });

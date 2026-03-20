@@ -55,6 +55,9 @@ describe('Property 4: デモモードフォールバックの有効性', () => {
 
         // displayName is correctly formatted
         expect(info.displayName).toBe(`${name}#${tag}`);
+
+        // source should always be 'demo' for generateDemoPlayerInfo
+        expect(info.source).toBe('demo');
       }),
       { numRuns: 100 },
     );
