@@ -1,0 +1,136 @@
+import { getRankByValue, DEFAULT_RANK, RANKS } from './constants/ranks';
+
+/**
+ * Valorant プレイヤー情報（Henrik-3 API またはデモモードから取得）
+ */
+export interface ValorantPlayerInfo {
+  name: string;
+  tag: string;
+  displayName: string;
+  rank: string;
+  rankValue: number;
+  peakRank: string;
+  peakRankValue: number;
+}
+
+/** Henrik-3 API v2 MMR レスポンスの型定義 */
+interface HenrikMMRResponse {
+  status: number;
+  data?: {
+    name?: string;
+    tag?: string;
+    current_data?: {
+      currenttier?: number;
+      currenttierpatched?: string;
+    };
+    highest_rank?: {
+      tier?: number;
+      patched_tier?: string;
+    };
+  };
+}
+
+const HENRIK_API_BASE = 'https://api.henrikdev.xyz';
+const DEFAULT_REGION = 'ap';
+const DEFAULT_PLATFORM = 'pc';
+
+/**
+ * Henrik-3 API 経由でプレイヤーのランク情報を取得する。
+ * API キーが未設定またはエラー時はデモモードにフォールバックする。
+ */
+export async function resolveRank(
+  name: string,
+  tag: string
+): Promise<ValorantPlayerInfo> {
+  const apiKey = process.env.VALORANT_API_KEY;
+
+  if (!apiKey) {
+    return generateDemoPlayerInfo(name, tag);
+  }
+
+  try {
+    return await fetchFromHenrikAPI(name, tag, apiKey);
+  } catch {
+    // API エラー時はデモモードにフォールバック
+    return generateDemoPlayerInfo(name, tag);
+  }
+}
+
+/**
+ * Henrik-3 API v3 MMR エンドポイントからプレイヤー情報を取得する
+ */
+async function fetchFromHenrikAPI(
+  name: string,
+  tag: string,
+  apiKey: string
+): Promise<ValorantPlayerInfo> {
+  const url = `${HENRIK_API_BASE}/valorant/v3/mmr/${DEFAULT_REGION}/${DEFAULT_PLATFORM}/${encodeURIComponent(name)}/${encodeURIComponent(tag)}`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: apiKey,
+    },
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Henrik API error: ${response.status}`);
+  }
+
+  const json: HenrikMMRResponse = await response.json();
+
+  if (!json.data) {
+    throw new Error('Henrik API returned no data');
+  }
+
+  const currentTier = json.data.current_data?.currenttier;
+  const currentRank = currentTier != null
+    ? getRankByValue(currentTier)
+    : undefined;
+
+  const peakTier = json.data.highest_rank?.tier;
+  const peakRank = peakTier != null
+    ? getRankByValue(peakTier)
+    : undefined;
+
+  const resolvedCurrentRank = currentRank ?? DEFAULT_RANK;
+  const resolvedPeakRank = peakRank ?? resolvedCurrentRank;
+
+  return {
+    name: json.data.name ?? name,
+    tag: json.data.tag ?? tag,
+    displayName: `${json.data.name ?? name}#${json.data.tag ?? tag}`,
+    rank: resolvedCurrentRank.label,
+    rankValue: resolvedCurrentRank.value,
+    peakRank: resolvedPeakRank.label,
+    peakRankValue: resolvedPeakRank.value,
+  };
+}
+
+/**
+ * デモモード: ランダムなランク情報を生成する。
+ * peak_rank は current_rank 以上の値になる。
+ */
+export function generateDemoPlayerInfo(
+  name: string,
+  tag: string
+): ValorantPlayerInfo {
+  const maxRankValue = RANKS.length; // 25
+  const rankValue = Math.floor(Math.random() * maxRankValue) + 1;
+  const currentRank = getRankByValue(rankValue) ?? DEFAULT_RANK;
+
+  // peak_rank は current_rank 以上
+  const peakRankValue =
+    rankValue + Math.floor(Math.random() * (maxRankValue - rankValue + 1));
+  const peakRank = getRankByValue(peakRankValue) ?? currentRank;
+
+  return {
+    name,
+    tag,
+    displayName: `${name}#${tag}`,
+    rank: currentRank.label,
+    rankValue: currentRank.value,
+    peakRank: peakRank.label,
+    peakRankValue: peakRank.value,
+  };
+}

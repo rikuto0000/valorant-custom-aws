@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+/*
+ * VALORANT Custom Team Builder — カラーシステム
+ * OkLCH 色彩モデルによる CSS カスタムプロパティ
+ */
+:root {
+  /* === VALORANT ブランドカラー (OkLCH) === */
+  --val-red: oklch(0.63 0.24 25);          /* #FF4655 — VALORANT レッド */
+  --val-red-hover: oklch(0.56 0.22 25);    /* ホバー時のレッド */
+  --val-red-muted: oklch(0.45 0.15 25);    /* ミュートレッド */
+
+  --val-navy: oklch(0.22 0.03 240);        /* #0F1923 — ネイビー/ダーク */
+  --val-dark: oklch(0.16 0.02 240);        /* より深いダーク背景 */
+  --val-dark-alt: oklch(0.20 0.025 240);   /* カード等のサブ背景 */
+
+  --val-light: oklch(0.95 0.01 240);       /* テキスト — ほぼホワイト */
+  --val-light-muted: oklch(0.75 0.02 240); /* セカンダリテキスト */
+  --val-light-dim: oklch(0.55 0.02 240);   /* ディムテキスト */
+
+  /* === UI カラー === */
+  --val-border: oklch(0.30 0.03 240);      /* ボーダー */
+  --val-border-hover: oklch(0.40 0.04 240);
+  --val-ring: oklch(0.63 0.24 25);         /* フォーカスリング（レッド） */
+
+  --val-input-bg: oklch(0.18 0.025 240);   /* 入力フィールド背景 */
+  --val-input-border: oklch(0.30 0.03 240);
+
+  /* === ロール別カラー (OkLCH) === */
+  --role-duelist: oklch(0.63 0.24 25);     /* レッド */
+  --role-initiator: oklch(0.65 0.20 145);  /* グリーン */
+  --role-controller: oklch(0.60 0.20 260); /* ブルー */
+  --role-sentinel: oklch(0.75 0.18 85);    /* イエロー */
+
+  /* === セマンティックカラー === */
+  --destructive: oklch(0.55 0.22 30);
+  --destructive-hover: oklch(0.48 0.20 30);
+
+  /* === フォント === */
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@theme inline {
+  --color-val-red: var(--val-red);
+  --color-val-red-hover: var(--val-red-hover);
+  --color-val-red-muted: var(--val-red-muted);
+  --color-val-navy: var(--val-navy);
+  --color-val-dark: var(--val-dark);
+  --color-val-dark-alt: var(--val-dark-alt);
+  --color-val-light: var(--val-light);
+  --color-val-light-muted: var(--val-light-muted);
+  --color-val-light-dim: var(--val-light-dim);
+  --color-val-border: var(--val-border);
+  --color-val-border-hover: var(--val-border-hover);
+  --color-val-ring: var(--val-ring);
+  --color-val-input-bg: var(--val-input-bg);
+  --color-val-input-border: var(--val-input-border);
+  --color-role-duelist: var(--role-duelist);
+  --color-role-initiator: var(--role-initiator);
+  --color-role-controller: var(--role-controller);
+  --color-role-sentinel: var(--role-sentinel);
+  --color-destructive: var(--destructive);
+  --color-destructive-hover: var(--destructive-hover);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* === ベーススタイル === */
+body {
+  background: var(--val-dark);
+  color: var(--val-light);
+  font-family: var(--font-sans), sans-serif;
+}
+
+/* === スクロールバー === */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--val-dark);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--val-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--val-border-hover);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--val-border) var(--val-dark);
+}
+
+/* === セレクション === */
+::selection {
+  background: var(--val-red);
+  color: var(--val-light);
+}
