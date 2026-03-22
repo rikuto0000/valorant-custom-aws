@@ -20,23 +20,13 @@ import {
   CardTitle,
   CardContent,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 
-type Phase = "player" | "team" | "agentBan" | "map" | "agentPick";
-type MapMode = "random" | "vote";
+type Phase = "player" | "team";
 
 interface RoomClientProps {
   room: Room;
   initialPlayers: Player[];
 }
-
-const PHASE_LABELS: Record<Phase, string> = {
-  player: "プレイヤー登録",
-  team: "チーム振り分け",
-  agentBan: "エージェントBAN",
-  map: "マップ選択",
-  agentPick: "エージェントピック",
-};
 
 export function RoomClient({ room, initialPlayers }: RoomClientProps) {
   const {
@@ -50,32 +40,25 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
     fetchRoom,
   } = useRoom(room, initialPlayers);
 
-  // Phase state
   const [phase, setPhase] = useState<Phase>("player");
-
-  // Team result state
   const [teamResult, setTeamResult] = useState<TeamResult | null>(null);
 
-  // BAN state
-  const [bannedAgentIds, setBannedAgentIds] = useState<string[]>([]);
-
-  // Map state
-  const [selectedMap, setSelectedMap] = useState<MapData | null>(null);
-  const [mapMode, setMapMode] = useState<MapMode>("random");
-
-  // Tier editor visibility
+  // Optional sections toggle
+  const [showBan, setShowBan] = useState(false);
+  const [showMap, setShowMap] = useState(false);
+  const [showPick, setShowPick] = useState(false);
   const [showTierEditor, setShowTierEditor] = useState(false);
 
-  // URL copy state
+  // Optional feature state
+  const [bannedAgentIds, setBannedAgentIds] = useState<string[]>([]);
+  const [selectedMap, setSelectedMap] = useState<MapData | null>(null);
+  const [mapMode, setMapMode] = useState<"random" | "vote">("random");
+
+  // URL copy
   const [copied, setCopied] = useState(false);
 
-  // Agent tier hook
   const { tierData } = useAgentTier();
-
-  // AppSync real-time sync
   useAppSync(room.id, () => fetchRoom(room.id));
-
-  // === Handlers ===
 
   async function handleCopyUrl() {
     try {
@@ -101,29 +84,24 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
     [deletePlayer, room.id]
   );
 
-  // PlayerPhase → TeamPhase
   const handleStartAllocation = useCallback(() => {
     if (players.length >= 2) {
       setPhase("team");
     }
   }, [players.length]);
 
-  // TeamPhase → AgentBanPhase (team confirmed)
-  const handleTeamConfirmed = useCallback((result: TeamResult) => {
-    setTeamResult(result);
-    setPhase("agentBan");
-  }, []);
-
-  // TeamPhase → PlayerPhase (reset)
   const handleResetToPlayer = useCallback(async () => {
     setTeamResult(null);
     setBannedAgentIds([]);
     setSelectedMap(null);
+    setShowBan(false);
+    setShowMap(false);
+    setShowPick(false);
+    setShowTierEditor(false);
     await resetTeams(room.id);
     setPhase("player");
   }, [resetTeams, room.id]);
 
-  // Rank mode change
   const handleRankModeChange = useCallback(
     async (mode: "current" | "peak") => {
       await updateRankMode(room.id, mode);
@@ -131,32 +109,17 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
     [updateRankMode, room.id]
   );
 
-  // AgentBanPhase → MapPhase
+  const handleTeamResultChange = useCallback((result: TeamResult) => {
+    setTeamResult(result);
+  }, []);
+
   const handleBanComplete = useCallback((ids: string[]) => {
     setBannedAgentIds(ids);
-    setPhase("map");
   }, []);
 
-  // MapPhase → AgentPickPhase
   const handleMapSelected = useCallback((map: MapData) => {
     setSelectedMap(map);
-    setPhase("agentPick");
   }, []);
-
-  const handleSkipMap = useCallback(() => {
-    setSelectedMap(null);
-    setPhase("agentPick");
-  }, []);
-
-  // AgentPickPhase → TeamPhase (re-allocate)
-  const handleReAllocate = useCallback(() => {
-    setTeamResult(null);
-    setBannedAgentIds([]);
-    setSelectedMap(null);
-    setPhase("team");
-  }, []);
-
-  // === Render ===
 
   return (
     <div className="min-h-screen px-4 py-8">
@@ -165,36 +128,15 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-val-light">
-              <span className="text-val-red">VALORANT</span> ルーム
+              <span className="text-val-red">VALORANT</span> カスタム
             </h1>
             <p className="text-xs text-val-light-dim mt-0.5 font-mono">
               {room.id.slice(0, 8)}...
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary">{PHASE_LABELS[phase]}</Badge>
-            <Button variant="outline" size="sm" onClick={handleCopyUrl}>
-              {copied ? "コピーしました" : "URLを共有"}
-            </Button>
-          </div>
-        </div>
-
-        {/* フェーズインジケーター */}
-        <div className="flex items-center justify-center gap-1 text-xs">
-          {(Object.keys(PHASE_LABELS) as Phase[]).map((p, i) => (
-            <span key={p} className="flex items-center gap-1">
-              {i > 0 && <span className="text-val-light-dim">→</span>}
-              <span
-                className={
-                  p === phase
-                    ? "text-val-red font-bold"
-                    : "text-val-light-dim"
-                }
-              >
-                {PHASE_LABELS[p]}
-              </span>
-            </span>
-          ))}
+          <Button variant="outline" size="sm" onClick={handleCopyUrl}>
+            {copied ? "コピーしました" : "URLを共有"}
+          </Button>
         </div>
 
         {/* エラー表示 */}
@@ -206,7 +148,7 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
           </Card>
         )}
 
-        {/* === PlayerPhase === */}
+        {/* === プレイヤー登録フェーズ === */}
         {phase === "player" && (
           <>
             <PlayerForm roomId={room.id} onPlayerAdded={handlePlayerAdded} />
@@ -239,7 +181,7 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
           </>
         )}
 
-        {/* === TeamPhase === */}
+        {/* === チーム振り分けフェーズ === */}
         {phase === "team" && (
           <>
             <Card>
@@ -252,10 +194,92 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
                   rankMode={room.rank_mode}
                   onRankModeChange={handleRankModeChange}
                   onReset={handleResetToPlayer}
-                  onTeamConfirmed={handleTeamConfirmed}
+                  onTeamResultChange={handleTeamResultChange}
                 />
               </CardContent>
             </Card>
+
+            {/* === オプション機能（折りたたみ） === */}
+            {teamResult && (
+              <div className="space-y-3">
+                <p className="text-sm text-val-light-muted text-center">
+                  オプション機能
+                </p>
+
+                {/* エージェントBAN */}
+                <CollapsibleSection
+                  title="エージェントBAN"
+                  open={showBan}
+                  onToggle={() => setShowBan(!showBan)}
+                >
+                  <BanPanel
+                    players={players}
+                    onBanComplete={handleBanComplete}
+                  />
+                </CollapsibleSection>
+
+                {/* マップ選択 */}
+                <CollapsibleSection
+                  title="マップ選択"
+                  open={showMap}
+                  onToggle={() => setShowMap(!showMap)}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-center gap-2">
+                      <Button
+                        variant={mapMode === "random" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setMapMode("random")}
+                      >
+                        ランダム
+                      </Button>
+                      <Button
+                        variant={mapMode === "vote" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setMapMode("vote")}
+                      >
+                        投票
+                      </Button>
+                    </div>
+                    {mapMode === "random" ? (
+                      <MapRandom onMapSelected={handleMapSelected} />
+                    ) : (
+                      <MapVote players={players} onMapSelected={handleMapSelected} />
+                    )}
+                  </div>
+                </CollapsibleSection>
+
+                {/* エージェントピック */}
+                <CollapsibleSection
+                  title="エージェントピック"
+                  open={showPick}
+                  onToggle={() => setShowPick(!showPick)}
+                >
+                  <div className="space-y-3">
+                    <div className="flex justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowTierEditor(!showTierEditor)}
+                      >
+                        {showTierEditor ? "Tier編集を閉じる" : "Tier編集"}
+                      </Button>
+                    </div>
+                    {showTierEditor && (
+                      <TierEditor onClose={() => setShowTierEditor(false)} />
+                    )}
+                    <PickResult
+                      players={players}
+                      teamA={teamResult.teamA}
+                      teamB={teamResult.teamB}
+                      bannedAgentIds={bannedAgentIds}
+                      mapId={selectedMap?.id ?? null}
+                      tierData={Object.keys(tierData).length > 0 ? tierData : null}
+                    />
+                  </div>
+                </CollapsibleSection>
+              </div>
+            )}
 
             <div className="flex justify-center">
               <Button variant="ghost" size="sm" onClick={handleResetToPlayer}>
@@ -264,96 +288,36 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
             </div>
           </>
         )}
-
-        {/* === AgentBanPhase === */}
-        {phase === "agentBan" && (
-          <>
-            <BanPanel
-              players={players}
-              onBanComplete={handleBanComplete}
-            />
-
-            <div className="flex justify-center gap-3">
-              <Button variant="ghost" size="sm" onClick={() => handleBanComplete([])}>
-                BANをスキップ
-              </Button>
-            </div>
-          </>
-        )}
-
-        {/* === MapPhase === */}
-        {phase === "map" && (
-          <>
-            {/* マップ選択モード切替 */}
-            <div className="flex items-center justify-center gap-2">
-              <Button
-                variant={mapMode === "random" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setMapMode("random")}
-              >
-                ランダム
-              </Button>
-              <Button
-                variant={mapMode === "vote" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setMapMode("vote")}
-              >
-                投票
-              </Button>
-            </div>
-
-            {mapMode === "random" ? (
-              <MapRandom onMapSelected={handleMapSelected} />
-            ) : (
-              <MapVote players={players} onMapSelected={handleMapSelected} />
-            )}
-
-            <div className="flex justify-center">
-              <Button variant="ghost" size="sm" onClick={handleSkipMap}>
-                マップ選択をスキップ
-              </Button>
-            </div>
-          </>
-        )}
-
-        {/* === AgentPickPhase === */}
-        {phase === "agentPick" && teamResult && (
-          <>
-            {/* Tier編集トグル */}
-            <div className="flex justify-end">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowTierEditor(!showTierEditor)}
-              >
-                {showTierEditor ? "Tier編集を閉じる" : "Tier編集"}
-              </Button>
-            </div>
-
-            {showTierEditor && (
-              <TierEditor onClose={() => setShowTierEditor(false)} />
-            )}
-
-            <PickResult
-              players={players}
-              teamA={teamResult.teamA}
-              teamB={teamResult.teamB}
-              bannedAgentIds={bannedAgentIds}
-              mapId={selectedMap?.id ?? null}
-              tierData={Object.keys(tierData).length > 0 ? tierData : null}
-            />
-
-            <div className="flex items-center justify-center gap-3">
-              <Button variant="outline" size="sm" onClick={handleReAllocate}>
-                再振り分け（チーム振り分けに戻る）
-              </Button>
-              <Button variant="ghost" size="sm" onClick={handleResetToPlayer}>
-                リセット（最初に戻る）
-              </Button>
-            </div>
-          </>
-        )}
       </div>
+    </div>
+  );
+}
+
+/** 折りたたみセクション */
+function CollapsibleSection({
+  title,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-val-border overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium text-val-light hover:bg-val-dark-alt transition-colors"
+      >
+        <span>{title}</span>
+        <span className="text-val-light-dim text-xs">
+          {open ? "▲ 閉じる" : "▼ 開く"}
+        </span>
+      </button>
+      {open && <div className="px-4 pb-4">{children}</div>}
     </div>
   );
 }

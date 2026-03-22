@@ -16,7 +16,7 @@ interface AllocationPanelProps {
   rankMode: RankMode;
   onRankModeChange?: (mode: RankMode) => void;
   onReset?: () => void;
-  onTeamConfirmed?: (result: TeamResult) => void;
+  onTeamResultChange?: (result: TeamResult) => void;
 }
 
 const MODES: { value: AllocationMode; label: string }[] = [
@@ -31,19 +31,24 @@ export function AllocationPanel({
   rankMode,
   onRankModeChange,
   onReset,
-  onTeamConfirmed,
+  onTeamResultChange,
 }: AllocationPanelProps) {
   const [mode, setMode] = useState<AllocationMode>("auto");
   const [teamResult, setTeamResult] = useState<TeamResult | null>(null);
 
   const handleAllocate = useCallback(() => {
     if (players.length < 2) return;
+    let result: TeamResult | null = null;
     if (mode === "auto") {
-      setTeamResult(autoBalance(players, rankMode));
+      result = autoBalance(players, rankMode);
     } else if (mode === "random") {
-      setTeamResult(randomSplit(players));
+      result = randomSplit(players);
     }
-  }, [players, rankMode, mode]);
+    if (result) {
+      setTeamResult(result);
+      onTeamResultChange?.(result);
+    }
+  }, [players, rankMode, mode, onTeamResultChange]);
 
   const handleRegenerate = useCallback(() => {
     handleAllocate();
@@ -56,15 +61,18 @@ export function AllocationPanel({
 
   const handleDraftComplete = useCallback((result: TeamResult) => {
     setTeamResult(result);
-  }, []);
+    onTeamResultChange?.(result);
+  }, [onTeamResultChange]);
 
   const handleManualComplete = useCallback((result: TeamResult) => {
     setTeamResult(result);
-  }, []);
+    onTeamResultChange?.(result);
+  }, [onTeamResultChange]);
 
   const handleTeamResultChange = useCallback((result: TeamResult) => {
     setTeamResult(result);
-  }, []);
+    onTeamResultChange?.(result);
+  }, [onTeamResultChange]);
 
   // ドラフト・手動モードで結果未確定の場合は専用UIを表示
   if (mode === "draft" && !teamResult) {
@@ -111,23 +119,14 @@ export function AllocationPanel({
 
       {/* 結果表示 */}
       {teamResult && (
-        <>
-          <TeamDisplay
-            teamResult={teamResult}
-            rankMode={rankMode}
-            onRegenerate={mode === "draft" || mode === "manual" ? undefined : handleRegenerate}
-            onReset={handleReset}
-            onRankModeChange={onRankModeChange}
-            onTeamResultChange={handleTeamResultChange}
-          />
-          {onTeamConfirmed && (
-            <div className="flex justify-center">
-              <Button onClick={() => onTeamConfirmed(teamResult)}>
-                チーム確定 → 次へ
-              </Button>
-            </div>
-          )}
-        </>
+        <TeamDisplay
+          teamResult={teamResult}
+          rankMode={rankMode}
+          onRegenerate={mode === "draft" || mode === "manual" ? undefined : handleRegenerate}
+          onReset={handleReset}
+          onRankModeChange={onRankModeChange}
+          onTeamResultChange={handleTeamResultChange}
+        />
       )}
     </div>
   );
