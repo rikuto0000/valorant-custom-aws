@@ -62,6 +62,10 @@ export function AllocationPanel({
     setTeamResult(result);
   }, []);
 
+  const handleTeamResultChange = useCallback((result: TeamResult) => {
+    setTeamResult(result);
+  }, []);
+
   // ドラフト・手動モードで結果未確定の場合は専用UIを表示
   if (mode === "draft" && !teamResult) {
     return (
@@ -114,6 +118,7 @@ export function AllocationPanel({
             onRegenerate={mode === "draft" || mode === "manual" ? undefined : handleRegenerate}
             onReset={handleReset}
             onRankModeChange={onRankModeChange}
+            onTeamResultChange={handleTeamResultChange}
           />
           {onTeamConfirmed && (
             <div className="flex justify-center">

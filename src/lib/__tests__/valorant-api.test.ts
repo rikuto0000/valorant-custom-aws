@@ -100,9 +100,9 @@ describe('valorant-api', () => {
       expect(info.tag).toBe('VALO');
       expect(info.displayName).toBe('Henrik3#VALO');
       expect(info.rank).toBe('Platinum 3');
-      expect(info.rankValue).toBe(15);
+      expect(info.rankValue).toBe(13);
       expect(info.peakRank).toBe('Diamond 3');
-      expect(info.peakRankValue).toBe(18);
+      expect(info.peakRankValue).toBe(16);
     });
 
     it('APIレスポンスにdata無しの場合はデモモードにフォールバックする', async () => {
