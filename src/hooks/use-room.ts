@@ -148,6 +148,9 @@ export function useRoom(initialRoom?: Room, initialPlayers?: Player[]): UseRoomR
 
   const updateRankMode = useCallback(async (roomId: string, rankMode: RankMode): Promise<boolean> => {
     setError(null);
+    setRoom((current) =>
+      current && current.id === roomId ? { ...current, rank_mode: rankMode } : current,
+    );
     try {
       const res = await fetch(`/api/rooms/${roomId}`, {
         method: "PATCH",
@@ -158,6 +161,7 @@ export function useRoom(initialRoom?: Room, initialPlayers?: Player[]): UseRoomR
         const json = await res.json();
         const err = json as ErrorResponse;
         setError(err.error.message);
+        await fetchRoom(roomId);
         return false;
       }
       // Re-fetch
@@ -171,9 +175,10 @@ export function useRoom(initialRoom?: Room, initialPlayers?: Player[]): UseRoomR
       return true;
     } catch {
       setError("ランクモードの更新に失敗しました");
+      await fetchRoom(roomId);
       return false;
     }
-  }, []);
+  }, [fetchRoom]);
 
   const resetTeams = useCallback(async (roomId: string): Promise<boolean> => {
     setError(null);

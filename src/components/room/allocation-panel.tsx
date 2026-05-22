@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import type { Player, RankMode, TeamResult } from "@/lib/types";
-import { autoBalance, randomSplit } from "@/lib/algorithms/team-allocator";
+import { autoBalance, randomSplit, buildTeamResult } from "@/lib/algorithms/team-allocator";
 import { Button } from "@/components/ui/button";
 import { TeamDisplay } from "./team-display";
 import { DraftMode } from "@/components/room/draft-mode";
@@ -35,6 +35,9 @@ export function AllocationPanel({
 }: AllocationPanelProps) {
   const [mode, setMode] = useState<AllocationMode>("auto");
   const [teamResult, setTeamResult] = useState<TeamResult | null>(null);
+  const displayedTeamResult = teamResult
+    ? buildTeamResult(teamResult.teamA, teamResult.teamB, rankMode)
+    : null;
 
   const handleAllocate = useCallback(() => {
     if (players.length < 2) return;
@@ -118,9 +121,9 @@ export function AllocationPanel({
       )}
 
       {/* 結果表示 */}
-      {teamResult && (
+      {displayedTeamResult && (
         <TeamDisplay
-          teamResult={teamResult}
+          teamResult={displayedTeamResult}
           rankMode={rankMode}
           onRegenerate={mode === "draft" || mode === "manual" ? undefined : handleRegenerate}
           onReset={handleReset}

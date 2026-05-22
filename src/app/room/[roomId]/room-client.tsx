@@ -30,6 +30,7 @@ interface RoomClientProps {
 
 export function RoomClient({ room, initialPlayers }: RoomClientProps) {
   const {
+    room: currentRoom,
     players,
     loading,
     error,
@@ -191,7 +192,7 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
               <CardContent>
                 <AllocationPanel
                   players={players}
-                  rankMode={room.rank_mode}
+                  rankMode={currentRoom?.rank_mode ?? room.rank_mode}
                   onRankModeChange={handleRankModeChange}
                   onReset={handleResetToPlayer}
                   onTeamResultChange={handleTeamResultChange}
