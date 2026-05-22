@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,29 +11,50 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { RANKS, DEFAULT_RANK } from "@/lib/constants/ranks";
-import type { PlayerInput } from "@/lib/types";
+import type { Player, PlayerInput } from "@/lib/types";
 import { cn } from "@/lib/cn";
 
 type InputMode = "api" | "manual";
 
 interface PlayerFormProps {
   roomId: string;
-  onPlayerAdded: (playerInput: PlayerInput) => Promise<unknown>;
+  title?: string;
+  submitLabel?: string;
+  apiLabel?: string;
+  showManualMode?: boolean;
+  defaultRiotId?: string;
+  demoWarningMessage?: string;
+  onPlayerAdded: (playerInput: PlayerInput) => Promise<Player | null>;
 }
 
-export function PlayerForm({ roomId, onPlayerAdded }: PlayerFormProps) {
+export function PlayerForm({
+  title = "プレイヤー追加",
+  submitLabel = "追加",
+  apiLabel = "API取得",
+  showManualMode = true,
+  defaultRiotId = "",
+  demoWarningMessage = "⚠ API取得に失敗したため、ランダムなランクが割り当てられました。手動入力で修正できます。",
+  onPlayerAdded,
+}: PlayerFormProps) {
+  const formId = useId();
   const [mode, setMode] = useState<InputMode>("api");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   // API mode state
-  const [riotId, setRiotId] = useState("");
+  const [riotId, setRiotId] = useState(defaultRiotId);
   const [demoWarning, setDemoWarning] = useState(false);
 
   // Manual mode state
   const [displayName, setDisplayName] = useState("");
   const [currentRankValue, setCurrentRankValue] = useState(DEFAULT_RANK.value);
   const [peakRankValue, setPeakRankValue] = useState(DEFAULT_RANK.value);
+
+  useEffect(() => {
+    if (defaultRiotId && !riotId) {
+      setRiotId(defaultRiotId);
+    }
+  }, [defaultRiotId, riotId]);
 
   function resetForm() {
     setRiotId("");
@@ -92,8 +113,10 @@ export function PlayerForm({ roomId, onPlayerAdded }: PlayerFormProps) {
         peak_rank_value: info.peakRankValue,
       };
 
-      await onPlayerAdded(playerInput);
-      resetForm();
+      const added = await onPlayerAdded(playerInput);
+      if (added) {
+        resetForm();
+      }
     } catch {
       setError("プレイヤーの追加に失敗しました");
     } finally {
@@ -128,8 +151,10 @@ export function PlayerForm({ roomId, onPlayerAdded }: PlayerFormProps) {
         peak_rank_value: peakRank.value,
       };
 
-      await onPlayerAdded(playerInput);
-      resetForm();
+      const added = await onPlayerAdded(playerInput);
+      if (added) {
+        resetForm();
+      }
     } catch {
       setError("プレイヤーの追加に失敗しました");
     } finally {
@@ -149,43 +174,45 @@ export function PlayerForm({ roomId, onPlayerAdded }: PlayerFormProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>プレイヤー追加</CardTitle>
+        <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardContent>
         {/* モード切替タブ */}
-        <div className="flex gap-1 mb-4 p-1 rounded-md bg-val-dark">
-          <button
-            type="button"
-            className={cn(
-              "flex-1 py-1.5 px-3 text-sm rounded transition-colors",
-              mode === "api"
-                ? "bg-val-dark-alt text-val-light font-medium"
-                : "text-val-light-dim hover:text-val-light"
-            )}
-            onClick={() => { setMode("api"); setError(""); }}
-          >
-            API取得
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "flex-1 py-1.5 px-3 text-sm rounded transition-colors",
-              mode === "manual"
-                ? "bg-val-dark-alt text-val-light font-medium"
-                : "text-val-light-dim hover:text-val-light"
-            )}
-            onClick={() => { setMode("manual"); setError(""); }}
-          >
-            手動入力
-          </button>
-        </div>
+        {showManualMode && (
+          <div className="flex gap-1 mb-4 p-1 rounded-md bg-val-dark">
+            <button
+              type="button"
+              className={cn(
+                "flex-1 py-1.5 px-3 text-sm rounded transition-colors",
+                mode === "api"
+                  ? "bg-val-dark-alt text-val-light font-medium"
+                  : "text-val-light-dim hover:text-val-light"
+              )}
+              onClick={() => { setMode("api"); setError(""); }}
+            >
+              {apiLabel}
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "flex-1 py-1.5 px-3 text-sm rounded transition-colors",
+                mode === "manual"
+                  ? "bg-val-dark-alt text-val-light font-medium"
+                  : "text-val-light-dim hover:text-val-light"
+              )}
+              onClick={() => { setMode("manual"); setError(""); }}
+            >
+              手動入力
+            </button>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-3">
           {mode === "api" ? (
             <div className="space-y-1.5">
-              <Label htmlFor="riot-id">Riot ID</Label>
+              <Label htmlFor={`${formId}-riot-id`}>Riot ID</Label>
               <Input
-                id="riot-id"
+                id={`${formId}-riot-id`}
                 placeholder="Name#Tag"
                 value={riotId}
                 onChange={(e) => {
@@ -198,9 +225,9 @@ export function PlayerForm({ roomId, onPlayerAdded }: PlayerFormProps) {
           ) : (
             <>
               <div className="space-y-1.5">
-                <Label htmlFor="display-name">プレイヤー名</Label>
+                <Label htmlFor={`${formId}-display-name`}>プレイヤー名</Label>
                 <Input
-                  id="display-name"
+                  id={`${formId}-display-name`}
                   placeholder="表示名を入力"
                   value={displayName}
                   onChange={(e) => {
@@ -212,9 +239,9 @@ export function PlayerForm({ roomId, onPlayerAdded }: PlayerFormProps) {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="current-rank">現在ランク</Label>
+                  <Label htmlFor={`${formId}-current-rank`}>現在ランク</Label>
                   <select
-                    id="current-rank"
+                    id={`${formId}-current-rank`}
                     className="flex h-10 w-full rounded-md border border-val-input-border bg-val-input-bg px-3 py-2 text-sm text-val-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-val-ring"
                     value={currentRankValue}
                     onChange={(e) => setCurrentRankValue(Number(e.target.value))}
@@ -228,9 +255,9 @@ export function PlayerForm({ roomId, onPlayerAdded }: PlayerFormProps) {
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="peak-rank">最高ランク</Label>
+                  <Label htmlFor={`${formId}-peak-rank`}>最高ランク</Label>
                   <select
-                    id="peak-rank"
+                    id={`${formId}-peak-rank`}
                     className="flex h-10 w-full rounded-md border border-val-input-border bg-val-input-bg px-3 py-2 text-sm text-val-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-val-ring"
                     value={peakRankValue}
                     onChange={(e) => setPeakRankValue(Number(e.target.value))}
@@ -253,7 +280,7 @@ export function PlayerForm({ roomId, onPlayerAdded }: PlayerFormProps) {
 
           {demoWarning && (
             <p className="text-sm text-yellow-400">
-              ⚠ API取得に失敗したため、ランダムなランクが割り当てられました。手動入力で修正できます。
+              {demoWarningMessage}
             </p>
           )}
 
@@ -264,7 +291,7 @@ export function PlayerForm({ roomId, onPlayerAdded }: PlayerFormProps) {
                 取得中...
               </span>
             ) : (
-              "追加"
+              submitLabel
             )}
           </Button>
         </form>

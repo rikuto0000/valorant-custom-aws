@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { Room, Player, PlayerInput, TeamResult, MapData } from "@/lib/types";
 import { useRoom } from "@/hooks/use-room";
 import { useRoomRealtime } from "@/hooks/use-room-realtime";
 import { useAgentTier } from "@/hooks/use-agent-tier";
+import { useParticipantIdentity } from "@/hooks/use-participant-identity";
 import { PlayerForm } from "@/components/room/player-form";
 import { PlayerList } from "@/components/room/player-list";
 import { AllocationPanel } from "@/components/room/allocation-panel";
@@ -49,6 +50,7 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
   const [showMap, setShowMap] = useState(false);
   const [showPick, setShowPick] = useState(false);
   const [showTierEditor, setShowTierEditor] = useState(false);
+  const [showAdminAdd, setShowAdminAdd] = useState(false);
 
   // Optional feature state
   const [bannedAgentIds, setBannedAgentIds] = useState<string[]>([]);
@@ -59,7 +61,22 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
   const [copied, setCopied] = useState(false);
 
   const { tierData } = useAgentTier();
+  const {
+    profile,
+    playerId: ownPlayerId,
+    rememberPlayer,
+    forgetRoomPlayer,
+  } = useParticipantIdentity(room.id);
+  const ownPlayer = ownPlayerId
+    ? players.find((player) => player.id === ownPlayerId) ?? null
+    : null;
   useRoomRealtime(room.id, () => fetchRoom(room.id));
+
+  useEffect(() => {
+    if (ownPlayerId && players.length > 0 && !ownPlayer) {
+      forgetRoomPlayer();
+    }
+  }, [ownPlayerId, ownPlayer, players.length, forgetRoomPlayer]);
 
   async function handleCopyUrl() {
     try {
@@ -71,18 +88,32 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
     }
   }
 
-  const handlePlayerAdded = useCallback(
+  const handleSelfPlayerAdded = useCallback(
     async (playerInput: PlayerInput) => {
-      await addPlayer(room.id, playerInput);
+      const added = await addPlayer(room.id, playerInput);
+      if (added) {
+        rememberPlayer(added);
+      }
+      return added;
+    },
+    [addPlayer, rememberPlayer, room.id]
+  );
+
+  const handleAdminPlayerAdded = useCallback(
+    async (playerInput: PlayerInput) => {
+      return addPlayer(room.id, playerInput);
     },
     [addPlayer, room.id]
   );
 
   const handleDeletePlayer = useCallback(
     async (playerId: string) => {
-      await deletePlayer(room.id, playerId);
+      const deleted = await deletePlayer(room.id, playerId);
+      if (deleted && playerId === ownPlayerId) {
+        forgetRoomPlayer();
+      }
     },
-    [deletePlayer, room.id]
+    [deletePlayer, forgetRoomPlayer, ownPlayerId, room.id]
   );
 
   const handleStartAllocation = useCallback(() => {
@@ -99,6 +130,7 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
     setShowMap(false);
     setShowPick(false);
     setShowTierEditor(false);
+    setShowAdminAdd(false);
     await resetTeams(room.id);
     setPhase("player");
   }, [resetTeams, room.id]);
@@ -152,7 +184,55 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
         {/* === プレイヤー登録フェーズ === */}
         {phase === "player" && (
           <>
-            <PlayerForm roomId={room.id} onPlayerAdded={handlePlayerAdded} />
+            {ownPlayer ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>参加中</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div>
+                    <p className="text-sm font-medium text-val-light">
+                      {ownPlayer.display_name}
+                    </p>
+                    <p className="text-xs text-val-light-muted font-mono">
+                      {ownPlayer.riot_id}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDeletePlayer(ownPlayer.id)}
+                    disabled={loading}
+                  >
+                    参加を取り消す
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <PlayerForm
+                roomId={room.id}
+                title="自分のIDで参加"
+                submitLabel="このルームに参加"
+                apiLabel="Riot IDで参加"
+                showManualMode={false}
+                defaultRiotId={profile?.riotId ?? ""}
+                demoWarningMessage="⚠ API取得に失敗したため、ランダムなランクで参加しました。必要なら代理追加の手動入力で修正できます。"
+                onPlayerAdded={handleSelfPlayerAdded}
+              />
+            )}
+
+            <CollapsibleSection
+              title="代理でプレイヤー追加"
+              open={showAdminAdd}
+              onToggle={() => setShowAdminAdd(!showAdminAdd)}
+            >
+              <PlayerForm
+                roomId={room.id}
+                title="プレイヤー追加"
+                submitLabel="追加"
+                onPlayerAdded={handleAdminPlayerAdded}
+              />
+            </CollapsibleSection>
 
             <Card>
               <CardHeader>
