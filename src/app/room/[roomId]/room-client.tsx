@@ -294,7 +294,9 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
                   onToggle={() => setShowBan(!showBan)}
                 >
                   <BanPanel
+                    roomId={room.id}
                     players={players}
+                    participantPlayerId={ownPlayerId}
                     onBanComplete={handleBanComplete}
                   />
                 </CollapsibleSection>
@@ -325,7 +327,12 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
                     {mapMode === "random" ? (
                       <MapRandom onMapSelected={handleMapSelected} />
                     ) : (
-                      <MapVote players={players} onMapSelected={handleMapSelected} />
+                      <MapVote
+                        roomId={room.id}
+                        players={players}
+                        participantPlayerId={ownPlayerId}
+                        onMapSelected={handleMapSelected}
+                      />
                     )}
                   </div>
                 </CollapsibleSection>

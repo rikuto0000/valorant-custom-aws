@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { Room, Player, PlayerInput, RoomStatus, RankMode, Team } from '../types';
+import type { Room, Player, PlayerInput, RoomStatus, RankMode, Team, RoomVote, RoomVoteKind } from '../types';
 import type { IDataStore } from './interface';
 
 const GLOBAL_KEY = '__valorant_demo_store__';
@@ -14,6 +14,7 @@ const ROOM_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 export class DemoStore implements IDataStore {
   private rooms: Map<string, Room> = new Map();
   private players: Map<string, Player[]> = new Map();
+  private votes: Map<string, RoomVote> = new Map();
 
   static getInstance(): DemoStore {
     if (!globalThis[GLOBAL_KEY]) {
@@ -55,6 +56,11 @@ export class DemoStore implements IDataStore {
   async deleteRoom(roomId: string): Promise<void> {
     this.rooms.delete(roomId);
     this.players.delete(roomId);
+    for (const key of this.votes.keys()) {
+      if (key.startsWith(`${roomId}:`)) {
+        this.votes.delete(key);
+      }
+    }
   }
 
   async addPlayer(roomId: string, player: PlayerInput): Promise<Player> {
@@ -90,6 +96,11 @@ export class DemoStore implements IDataStore {
         roomPlayers.filter((p) => p.id !== playerId),
       );
     }
+    for (const key of this.votes.keys()) {
+      if (key.startsWith(`${roomId}:`) && key.endsWith(`:${playerId}`)) {
+        this.votes.delete(key);
+      }
+    }
   }
 
   async updatePlayerTeam(roomId: string, playerId: string, team: Team): Promise<void> {
@@ -111,6 +122,41 @@ export class DemoStore implements IDataStore {
     }
   }
 
+  async getRoomVotes(roomId: string, kind: RoomVoteKind): Promise<RoomVote[]> {
+    return [...this.votes.values()]
+      .filter((vote) => vote.room_id === roomId && vote.kind === kind)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
+
+  async upsertRoomVote(
+    roomId: string,
+    kind: RoomVoteKind,
+    playerId: string,
+    choices: string[],
+  ): Promise<RoomVote> {
+    const key = `${roomId}:${kind}:${playerId}`;
+    const existing = this.votes.get(key);
+    const now = new Date().toISOString();
+    const vote: RoomVote = {
+      room_id: roomId,
+      kind,
+      player_id: playerId,
+      choices,
+      created_at: existing?.created_at ?? now,
+      updated_at: now,
+    };
+    this.votes.set(key, vote);
+    return vote;
+  }
+
+  async clearRoomVotes(roomId: string, kind: RoomVoteKind): Promise<void> {
+    for (const [key, vote] of this.votes) {
+      if (vote.room_id === roomId && vote.kind === kind) {
+        this.votes.delete(key);
+      }
+    }
+  }
+
   async cleanupExpiredRooms(): Promise<void> {
     const now = Date.now();
     for (const [roomId, room] of this.rooms) {
@@ -118,6 +164,11 @@ export class DemoStore implements IDataStore {
       if (now - createdAt > ROOM_TTL_MS) {
         this.rooms.delete(roomId);
         this.players.delete(roomId);
+        for (const key of this.votes.keys()) {
+          if (key.startsWith(`${roomId}:`)) {
+            this.votes.delete(key);
+          }
+        }
       }
     }
   }

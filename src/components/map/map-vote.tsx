@@ -3,54 +3,78 @@
 import { useState, useCallback } from 'react';
 import { resolveMapVote } from '@/lib/algorithms/map-selector';
 import { MAPS } from '@/lib/constants/maps';
+import { useRoomVotes } from '@/hooks/use-room-votes';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import type { Player, MapData } from '@/lib/types';
 
 export interface MapVoteProps {
+  roomId: string;
   players: Player[];
+  participantPlayerId: string | null;
   onMapSelected?: (map: MapData) => void;
 }
 
-export function MapVote({ players, onMapSelected }: MapVoteProps) {
-  const [currentVoterIndex, setCurrentVoterIndex] = useState(0);
-  const [votes, setVotes] = useState<Record<string, string[]>>({});
+export function MapVote({
+  roomId,
+  players,
+  participantPlayerId,
+  onMapSelected,
+}: MapVoteProps) {
+  const {
+    votes,
+    loading,
+    error,
+    submitVote,
+    clearVotes,
+  } = useRoomVotes(roomId, 'map');
   const [currentSelection, setCurrentSelection] = useState<string | null>(null);
   const [result, setResult] = useState<MapData | null>(null);
-
-  const currentPlayer = players[currentVoterIndex] ?? null;
+  const requiredVoteCount = Math.min(10, players.length);
+  const ownVote = participantPlayerId
+    ? votes.find((vote) => vote.player_id === participantPlayerId) ?? null
+    : null;
 
   const handleMapSelect = useCallback((mapId: string) => {
+    if (ownVote) return;
     setCurrentSelection(mapId);
-  }, []);
+  }, [ownVote]);
 
-  const handleVoteConfirm = useCallback(() => {
-    if (!currentSelection || !currentPlayer) return;
-
-    const newVotes = { ...votes };
-    // Add voter to the selected map's voter list
-    if (!newVotes[currentSelection]) {
-      newVotes[currentSelection] = [];
+  const handleVoteConfirm = useCallback(async () => {
+    if (!participantPlayerId || !currentSelection) return;
+    const ok = await submitVote(participantPlayerId, [currentSelection]);
+    if (ok) {
+      setCurrentSelection(null);
     }
-    newVotes[currentSelection] = [...newVotes[currentSelection], currentPlayer.id];
-    setVotes(newVotes);
+  }, [currentSelection, participantPlayerId, submitVote]);
+
+  const handleRevealVotes = useCallback(() => {
+    if (votes.length < requiredVoteCount) return;
+    const groupedVotes: Record<string, string[]> = {};
+    for (const vote of votes) {
+      const mapId = vote.choices[0];
+      if (!mapId) continue;
+      groupedVotes[mapId] = [...(groupedVotes[mapId] ?? []), vote.player_id];
+    }
+    const selectedMap = resolveMapVote(groupedVotes);
+    setResult(selectedMap);
+    onMapSelected?.(selectedMap);
+  }, [onMapSelected, requiredVoteCount, votes]);
+
+  const handleResetVotes = useCallback(async () => {
+    await clearVotes();
     setCurrentSelection(null);
-
-    if (currentVoterIndex + 1 >= players.length) {
-      // All players voted — resolve
-      const selectedMap = resolveMapVote(newVotes);
-      setResult(selectedMap);
-      onMapSelected?.(selectedMap);
-    } else {
-      setCurrentVoterIndex(currentVoterIndex + 1);
-    }
-  }, [currentSelection, currentPlayer, votes, currentVoterIndex, players, onMapSelected]);
+    setResult(null);
+  }, [clearVotes]);
 
   // Vote tally for display
   const voteCounts: Record<string, number> = {};
-  for (const [mapId, voters] of Object.entries(votes)) {
-    voteCounts[mapId] = voters.length;
+  for (const vote of votes) {
+    const mapId = vote.choices[0];
+    if (mapId) {
+      voteCounts[mapId] = (voteCounts[mapId] ?? 0) + 1;
+    }
   }
 
   // === Result view ===
@@ -112,26 +136,38 @@ export function MapVote({ players, onMapSelected }: MapVoteProps) {
         <CardTitle>マップ投票</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {currentPlayer && (
-          <div className="flex items-center gap-2">
-            <Badge>{currentPlayer.display_name}</Badge>
-            <span className="text-sm text-val-light-muted">
-              ({currentVoterIndex + 1}/{players.length})
-            </span>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <Badge>投票済み {votes.length}/{requiredVoteCount}</Badge>
+          <span className="text-sm text-val-light-muted">
+            {requiredVoteCount}票集まったら開示できます
+          </span>
+        </div>
 
         <p className="text-sm text-val-light-muted">
-          プレイしたいマップを1つ選択してください
+          各参加者がプレイしたいマップを1つ選択してください
         </p>
+        {!participantPlayerId && (
+          <p className="text-sm text-yellow-400">
+            自分のIDで参加すると投票できます。
+          </p>
+        )}
+        {ownVote && (
+          <div className="rounded-md border border-val-border bg-val-dark-alt p-3 text-sm text-val-light-muted">
+            投票済み: {MAPS.find((map) => map.id === ownVote.choices[0])?.name ?? ownVote.choices[0]}
+          </div>
+        )}
+        {error && (
+          <p className="text-sm text-val-red">{error}</p>
+        )}
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {MAPS.map((map) => {
-            const isSelected = currentSelection === map.id;
+            const isSelected = (ownVote?.choices[0] ?? currentSelection) === map.id;
             return (
               <button
                 key={map.id}
                 type="button"
+                disabled={Boolean(ownVote)}
                 onClick={() => handleMapSelect(map.id)}
                 className={`relative overflow-hidden rounded-lg border transition-all ${
                   isSelected
@@ -153,13 +189,28 @@ export function MapVote({ players, onMapSelected }: MapVoteProps) {
           })}
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button
             size="sm"
-            disabled={!currentSelection}
+            disabled={!participantPlayerId || Boolean(ownVote) || !currentSelection || loading}
             onClick={handleVoteConfirm}
           >
-            投票する
+            {ownVote ? '投票済み' : '投票する'}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={votes.length < requiredVoteCount}
+            onClick={handleRevealVotes}
+          >
+            開示する
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleResetVotes}
+          >
+            投票をリセット
           </Button>
         </div>
       </CardContent>

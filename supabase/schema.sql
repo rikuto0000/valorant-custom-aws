@@ -28,11 +28,26 @@ create index if not exists rooms_expires_at_idx on public.rooms(expires_at);
 create index if not exists players_room_id_created_at_idx
   on public.players(room_id, created_at);
 
+create table if not exists public.room_votes (
+  room_id uuid not null references public.rooms(id) on delete cascade,
+  kind text not null check (kind in ('ban', 'map')),
+  player_id uuid not null references public.players(id) on delete cascade,
+  choices text[] not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (room_id, kind, player_id)
+);
+
+create index if not exists room_votes_room_kind_idx
+  on public.room_votes(room_id, kind, created_at);
+
 alter table public.rooms enable row level security;
 alter table public.players enable row level security;
+alter table public.room_votes enable row level security;
 
 grant all on table public.rooms to service_role;
 grant all on table public.players to service_role;
+grant all on table public.room_votes to service_role;
 
 do $$
 begin
@@ -64,6 +79,16 @@ begin
   ) then
     alter publication supabase_realtime add table public.players;
   end if;
+
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'room_votes'
+  ) then
+    alter publication supabase_realtime add table public.room_votes;
+  end if;
 end $$;
 
 -- The app's mutations go through Next.js API routes using the service role key,
@@ -76,7 +101,10 @@ end $$;
 --
 -- grant select on table public.rooms to anon;
 -- grant select on table public.players to anon;
+-- grant select on table public.room_votes to anon;
 -- create policy "anon can read rooms for realtime"
 --   on public.rooms for select to anon using (true);
 -- create policy "anon can read players for realtime"
 --   on public.players for select to anon using (true);
+-- create policy "anon can read room votes for realtime"
+--   on public.room_votes for select to anon using (true);

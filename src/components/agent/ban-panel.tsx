@@ -5,6 +5,7 @@ import { cn } from '@/lib/cn';
 import { AGENTS } from '@/lib/constants/agents';
 import { teamBan, voteBan } from '@/lib/algorithms/agent-picker';
 import { getAgentById } from '@/lib/constants/agents';
+import { useRoomVotes } from '@/hooks/use-room-votes';
 import { AgentIcon } from './agent-icon';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -15,22 +16,38 @@ type BanMode = 'team' | 'vote';
 type TeamBanPhase = 'teamA' | 'teamB' | 'done';
 
 export interface BanPanelProps {
+  roomId: string;
   players: Player[];
+  participantPlayerId: string | null;
   onBanComplete: (bannedIds: string[]) => void;
 }
 
-export function BanPanel({ players, onBanComplete }: BanPanelProps) {
+export function BanPanel({
+  roomId,
+  players,
+  participantPlayerId,
+  onBanComplete,
+}: BanPanelProps) {
   const [banMode, setBanMode] = useState<BanMode>('team');
+  const {
+    votes: roomVotes,
+    loading: votesLoading,
+    error: votesError,
+    submitVote,
+    clearVotes,
+  } = useRoomVotes(roomId, 'ban');
 
   // Team BAN state
   const [teamBanPhase, setTeamBanPhase] = useState<TeamBanPhase>('teamA');
   const [teamABan, setTeamABan] = useState<string | null>(null);
-  const [teamBBan, setTeamBBan] = useState<string | null>(null);
+  const [, setTeamBBan] = useState<string | null>(null);
 
   // Vote BAN state
-  const [currentVoterIndex, setCurrentVoterIndex] = useState(0);
-  const [votes, setVotes] = useState<Record<string, string[]>>({});
   const [currentVotes, setCurrentVotes] = useState<string[]>([]);
+  const requiredVoteCount = Math.min(10, players.length);
+  const ownVote = participantPlayerId
+    ? roomVotes.find((vote) => vote.player_id === participantPlayerId) ?? null
+    : null;
 
   // Result state
   const [bannedIds, setBannedIds] = useState<string[] | null>(null);
@@ -54,6 +71,7 @@ export function BanPanel({ players, onBanComplete }: BanPanelProps) {
 
   // === Vote BAN handlers ===
   const handleVoteSelect = useCallback((agentId: string) => {
+    if (ownVote) return;
     setCurrentVotes((prev) => {
       if (prev.includes(agentId)) {
         return prev.filter((id) => id !== agentId);
@@ -61,22 +79,30 @@ export function BanPanel({ players, onBanComplete }: BanPanelProps) {
       if (prev.length >= 2) return prev;
       return [...prev, agentId];
     });
-  }, []);
+  }, [ownVote]);
 
-  const handleVoteConfirm = useCallback(() => {
-    if (currentVotes.length !== 2) return;
-    const player = players[currentVoterIndex];
-    const newVotes = { ...votes, [player.id]: currentVotes };
-    setVotes(newVotes);
-    setCurrentVotes([]);
-
-    if (currentVoterIndex + 1 >= players.length) {
-      const result = voteBan(newVotes);
-      setBannedIds(result);
-    } else {
-      setCurrentVoterIndex(currentVoterIndex + 1);
+  const handleVoteConfirm = useCallback(async () => {
+    if (!participantPlayerId || currentVotes.length !== 2) return;
+    const ok = await submitVote(participantPlayerId, currentVotes);
+    if (ok) {
+      setCurrentVotes([]);
     }
-  }, [currentVotes, currentVoterIndex, players, votes]);
+  }, [currentVotes, participantPlayerId, submitVote]);
+
+  const handleRevealVotes = useCallback(() => {
+    if (roomVotes.length < requiredVoteCount) return;
+    const voteRecord = Object.fromEntries(
+      roomVotes.map((vote) => [vote.player_id, vote.choices]),
+    );
+    const result = voteBan(voteRecord);
+    setBannedIds(result);
+  }, [requiredVoteCount, roomVotes]);
+
+  const handleResetVoteBan = useCallback(async () => {
+    await clearVotes();
+    setCurrentVotes([]);
+    setBannedIds(null);
+  }, [clearVotes]);
 
   const handleConfirmBan = useCallback(() => {
     if (bannedIds) {
@@ -137,6 +163,7 @@ export function BanPanel({ players, onBanComplete }: BanPanelProps) {
               setTeamBanPhase('teamA');
               setTeamABan(null);
               setTeamBBan(null);
+              setBannedIds(null);
             }}
           >
             チームBAN
@@ -146,9 +173,8 @@ export function BanPanel({ players, onBanComplete }: BanPanelProps) {
             size="sm"
             onClick={() => {
               setBanMode('vote');
-              setCurrentVoterIndex(0);
-              setVotes({});
               setCurrentVotes([]);
+              setBannedIds(null);
             }}
           >
             投票BAN
@@ -192,26 +218,56 @@ export function BanPanel({ players, onBanComplete }: BanPanelProps) {
         {banMode === 'vote' && (
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <Badge>{players[currentVoterIndex]?.display_name}</Badge>
+              <Badge>投票済み {roomVotes.length}/{requiredVoteCount}</Badge>
               <span className="text-sm text-val-light-muted">
-                ({currentVoterIndex + 1}/{players.length})
+                {requiredVoteCount}票集まったら開示できます
               </span>
             </div>
             <p className="text-sm text-val-light-muted">
-              BANしたいエージェントを2体選択してください
+              各参加者がBANしたいエージェントを2体選択してください
             </p>
+            {!participantPlayerId && (
+              <p className="text-sm text-yellow-400">
+                自分のIDで参加すると投票できます。
+              </p>
+            )}
+            {ownVote && (
+              <div className="rounded-md border border-val-border bg-val-dark-alt p-3 text-sm text-val-light-muted">
+                投票済み: {ownVote.choices
+                  .map((id) => getAgentById(id)?.nameJa ?? id)
+                  .join(' / ')}
+              </div>
+            )}
+            {votesError && (
+              <p className="text-sm text-val-red">{votesError}</p>
+            )}
             <AgentGrid
               onSelect={handleVoteSelect}
-              disabledIds={new Set()}
-              selectedIds={new Set(currentVotes)}
+              disabledIds={new Set(ownVote ? AGENTS.map((agent) => agent.id) : [])}
+              selectedIds={new Set(ownVote?.choices ?? currentVotes)}
             />
-            <div className="flex justify-end">
+            <div className="flex flex-wrap justify-end gap-2">
               <Button
                 size="sm"
-                disabled={currentVotes.length !== 2}
+                disabled={!participantPlayerId || Boolean(ownVote) || currentVotes.length !== 2 || votesLoading}
                 onClick={handleVoteConfirm}
               >
-                投票確定 ({currentVotes.length}/2)
+                {ownVote ? '投票済み' : `投票する (${currentVotes.length}/2)`}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={roomVotes.length < requiredVoteCount}
+                onClick={handleRevealVotes}
+              >
+                開示する
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleResetVoteBan}
+              >
+                投票をリセット
               </Button>
             </div>
           </div>

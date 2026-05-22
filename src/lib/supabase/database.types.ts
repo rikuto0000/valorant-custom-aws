@@ -1,4 +1,4 @@
-import type { RankMode, RoomStatus, Team } from '@/lib/types';
+import type { RankMode, RoomStatus, RoomVoteKind, Team } from '@/lib/types';
 
 export type Database = {
   public: {
@@ -64,6 +64,42 @@ export type Database = {
             foreignKeyName: 'players_room_id_fkey';
             columns: ['room_id'];
             referencedRelation: 'rooms';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      room_votes: {
+        Row: {
+          room_id: string;
+          kind: RoomVoteKind;
+          player_id: string;
+          choices: string[];
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          room_id: string;
+          kind: RoomVoteKind;
+          player_id: string;
+          choices: string[];
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          choices?: string[];
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'room_votes_room_id_fkey';
+            columns: ['room_id'];
+            referencedRelation: 'rooms';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'room_votes_player_id_fkey';
+            columns: ['player_id'];
+            referencedRelation: 'players';
             referencedColumns: ['id'];
           },
         ];

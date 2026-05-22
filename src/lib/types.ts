@@ -34,6 +34,18 @@ export interface PlayerInput {
   peak_rank_value: number;
 }
 
+// === ルーム内投票 ===
+export type RoomVoteKind = 'ban' | 'map';
+
+export interface RoomVote {
+  room_id: string;
+  kind: RoomVoteKind;
+  player_id: string;
+  choices: string[];
+  created_at: string;
+  updated_at: string;
+}
+
 // === エージェント ===
 export type AgentRole = 'Duelist' | 'Initiator' | 'Controller' | 'Sentinel';
 export type TierRank = 'S' | 'A' | 'B' | 'C' | 'D';

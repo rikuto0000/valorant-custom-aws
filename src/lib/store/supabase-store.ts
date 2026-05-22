@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { Player, PlayerInput, RankMode, Room, RoomStatus, Team } from '../types';
+import type { Player, PlayerInput, RankMode, Room, RoomStatus, Team, RoomVote, RoomVoteKind } from '../types';
 import { getSupabaseAdmin } from '../supabase/server';
 import type { IDataStore } from './interface';
 
@@ -139,6 +139,56 @@ export class SupabaseStore implements IDataStore {
       .from('players')
       .update({ team: null })
       .eq('room_id', roomId);
+
+    raiseSupabaseError(error);
+  }
+
+  async getRoomVotes(roomId: string, kind: RoomVoteKind): Promise<RoomVote[]> {
+    const { data, error } = await getSupabaseAdmin()
+      .from('room_votes')
+      .select('*')
+      .eq('room_id', roomId)
+      .eq('kind', kind)
+      .order('created_at', { ascending: true });
+
+    raiseSupabaseError(error);
+    return data ?? [];
+  }
+
+  async upsertRoomVote(
+    roomId: string,
+    kind: RoomVoteKind,
+    playerId: string,
+    choices: string[],
+  ): Promise<RoomVote> {
+    const { data, error } = await getSupabaseAdmin()
+      .from('room_votes')
+      .upsert(
+        {
+          room_id: roomId,
+          kind,
+          player_id: playerId,
+          choices,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'room_id,kind,player_id' },
+      )
+      .select()
+      .single();
+
+    raiseSupabaseError(error);
+    if (!data) {
+      throw new Error('投票の保存に失敗しました');
+    }
+    return data;
+  }
+
+  async clearRoomVotes(roomId: string, kind: RoomVoteKind): Promise<void> {
+    const { error } = await getSupabaseAdmin()
+      .from('room_votes')
+      .delete()
+      .eq('room_id', roomId)
+      .eq('kind', kind);
 
     raiseSupabaseError(error);
   }

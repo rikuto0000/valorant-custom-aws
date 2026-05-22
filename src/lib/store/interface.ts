@@ -1,4 +1,4 @@
-import type { Room, Player, PlayerInput, RoomStatus, RankMode, Team } from '../types';
+import type { Room, Player, PlayerInput, RoomStatus, RankMode, Team, RoomVote, RoomVoteKind } from '../types';
 
 export interface IDataStore {
   createRoom(): Promise<Room>;
@@ -12,6 +12,10 @@ export interface IDataStore {
   deletePlayer(roomId: string, playerId: string): Promise<void>;
   updatePlayerTeam(roomId: string, playerId: string, team: Team): Promise<void>;
   resetTeams(roomId: string): Promise<void>;
+
+  getRoomVotes(roomId: string, kind: RoomVoteKind): Promise<RoomVote[]>;
+  upsertRoomVote(roomId: string, kind: RoomVoteKind, playerId: string, choices: string[]): Promise<RoomVote>;
+  clearRoomVotes(roomId: string, kind: RoomVoteKind): Promise<void>;
 
   cleanupExpiredRooms(): Promise<void>;
 }

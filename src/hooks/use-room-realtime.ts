@@ -45,6 +45,16 @@ export function useRoomRealtime(
         },
         scheduleRefresh,
       )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'room_votes',
+          filter: `room_id=eq.${roomId}`,
+        },
+        scheduleRefresh,
+      )
       .subscribe();
 
     return () => {
