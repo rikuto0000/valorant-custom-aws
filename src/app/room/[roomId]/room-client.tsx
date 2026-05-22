@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import type { Room, Player, PlayerInput, TeamResult, MapData } from "@/lib/types";
 import { useRoom } from "@/hooks/use-room";
 import { useRoomRealtime } from "@/hooks/use-room-realtime";
@@ -9,6 +9,7 @@ import { useParticipantIdentity } from "@/hooks/use-participant-identity";
 import { PlayerForm } from "@/components/room/player-form";
 import { PlayerList } from "@/components/room/player-list";
 import { AllocationPanel } from "@/components/room/allocation-panel";
+import { TeamDisplay } from "@/components/room/team-display";
 import { BanPanel } from "@/components/agent/ban-panel";
 import { PickResult } from "@/components/agent/pick-result";
 import { TierEditor } from "@/components/agent/tier-editor";
@@ -21,6 +22,7 @@ import {
   CardTitle,
   CardContent,
 } from "@/components/ui/card";
+import { buildTeamResult } from "@/lib/algorithms/team-allocator";
 
 type Phase = "player" | "team";
 
@@ -37,6 +39,7 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
     error,
     addPlayer,
     deletePlayer,
+    updateTeam,
     updateRankMode,
     resetTeams,
     fetchRoom,
@@ -64,12 +67,21 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
   const {
     profile,
     playerId: ownPlayerId,
+    isHost,
     rememberPlayer,
     forgetRoomPlayer,
   } = useParticipantIdentity(room.id);
+  const currentRankMode = currentRoom?.rank_mode ?? room.rank_mode;
   const ownPlayer = ownPlayerId
     ? players.find((player) => player.id === ownPlayerId) ?? null
     : null;
+  const assignedTeamResult = useMemo(() => {
+    const teamA = players.filter((player) => player.team === "A");
+    const teamB = players.filter((player) => player.team === "B");
+    if (teamA.length === 0 && teamB.length === 0) return null;
+    return buildTeamResult(teamA, teamB, currentRankMode);
+  }, [currentRankMode, players]);
+  const visibleTeamResult = teamResult ?? assignedTeamResult;
   useRoomRealtime(room.id, () => fetchRoom(room.id));
 
   useEffect(() => {
@@ -77,6 +89,8 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
       forgetRoomPlayer();
     }
   }, [ownPlayerId, ownPlayer, players.length, forgetRoomPlayer]);
+
+  const effectivePhase: Phase = phase === "player" && assignedTeamResult ? "team" : phase;
 
   async function handleCopyUrl() {
     try {
@@ -117,12 +131,13 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
   );
 
   const handleStartAllocation = useCallback(() => {
-    if (players.length >= 2) {
+    if (isHost && players.length >= 2) {
       setPhase("team");
     }
-  }, [players.length]);
+  }, [isHost, players.length]);
 
   const handleResetToPlayer = useCallback(async () => {
+    if (!isHost) return;
     setTeamResult(null);
     setBannedAgentIds([]);
     setSelectedMap(null);
@@ -133,18 +148,35 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
     setShowAdminAdd(false);
     await resetTeams(room.id);
     setPhase("player");
-  }, [resetTeams, room.id]);
+  }, [isHost, resetTeams, room.id]);
 
   const handleRankModeChange = useCallback(
     async (mode: "current" | "peak") => {
+      if (!isHost) return;
       await updateRankMode(room.id, mode);
     },
-    [updateRankMode, room.id]
+    [isHost, updateRankMode, room.id]
+  );
+
+  const persistTeamResult = useCallback(
+    async (result: TeamResult) => {
+      setTeamResult(result);
+      const updates = [
+        ...result.teamA.map((player) => updateTeam(room.id, player.id, "A")),
+        ...result.teamB.map((player) => updateTeam(room.id, player.id, "B")),
+      ];
+      const results = await Promise.all(updates);
+      if (results.every(Boolean)) {
+        await fetchRoom(room.id);
+      }
+    },
+    [fetchRoom, room.id, updateTeam],
   );
 
   const handleTeamResultChange = useCallback((result: TeamResult) => {
-    setTeamResult(result);
-  }, []);
+    if (!isHost) return;
+    void persistTeamResult(result);
+  }, [isHost, persistTeamResult]);
 
   const handleBanComplete = useCallback((ids: string[]) => {
     setBannedAgentIds(ids);
@@ -182,7 +214,7 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
         )}
 
         {/* === プレイヤー登録フェーズ === */}
-        {phase === "player" && (
+        {effectivePhase === "player" && (
           <>
             {ownPlayer ? (
               <Card>
@@ -221,6 +253,7 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
               />
             )}
 
+            {isHost && (
             <CollapsibleSection
               title="代理でプレイヤー追加"
               open={showAdminAdd}
@@ -233,6 +266,7 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
                 onPlayerAdded={handleAdminPlayerAdded}
               />
             </CollapsibleSection>
+            )}
 
             <Card>
               <CardHeader>
@@ -246,42 +280,73 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
                 ) : (
                   <PlayerList
                     players={players}
-                    onDeletePlayer={handleDeletePlayer}
+                    onDeletePlayer={isHost ? handleDeletePlayer : undefined}
                   />
                 )}
               </CardContent>
             </Card>
 
-            {players.length >= 2 && (
+            {isHost && players.length >= 2 && (
               <div className="flex justify-center">
                 <Button onClick={handleStartAllocation}>
                   チーム振り分けへ ({players.length}人)
                 </Button>
               </div>
             )}
+            {!isHost && players.length >= 2 && (
+              <Card>
+                <CardContent className="py-3 text-center text-sm text-val-light-muted">
+                  ホストがチーム分けを開始します
+                </CardContent>
+              </Card>
+            )}
           </>
         )}
 
         {/* === チーム振り分けフェーズ === */}
-        {phase === "team" && (
+        {effectivePhase === "team" && (
           <>
             <Card>
               <CardHeader>
                 <CardTitle>チーム振り分け</CardTitle>
               </CardHeader>
               <CardContent>
-                <AllocationPanel
-                  players={players}
-                  rankMode={currentRoom?.rank_mode ?? room.rank_mode}
-                  onRankModeChange={handleRankModeChange}
-                  onReset={handleResetToPlayer}
-                  onTeamResultChange={handleTeamResultChange}
-                />
+                {isHost ? (
+                  <>
+                    <AllocationPanel
+                      players={players}
+                      rankMode={currentRankMode}
+                      onRankModeChange={handleRankModeChange}
+                      onReset={handleResetToPlayer}
+                      onTeamResultChange={handleTeamResultChange}
+                    />
+                    {assignedTeamResult && !teamResult && (
+                      <div className="mt-4 border-t border-val-border pt-4">
+                        <TeamDisplay
+                          teamResult={assignedTeamResult}
+                          rankMode={currentRankMode}
+                          onReset={handleResetToPlayer}
+                          onRankModeChange={handleRankModeChange}
+                          onTeamResultChange={handleTeamResultChange}
+                        />
+                      </div>
+                    )}
+                  </>
+                ) : visibleTeamResult ? (
+                  <TeamDisplay
+                    teamResult={visibleTeamResult}
+                    rankMode={currentRankMode}
+                  />
+                ) : (
+                  <p className="py-6 text-center text-sm text-val-light-muted">
+                    ホストがチーム分け中です
+                  </p>
+                )}
               </CardContent>
             </Card>
 
             {/* === オプション機能（折りたたみ） === */}
-            {teamResult && (
+            {visibleTeamResult && (
               <div className="space-y-3">
                 <p className="text-sm text-val-light-muted text-center">
                   オプション機能
@@ -297,6 +362,7 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
                     roomId={room.id}
                     players={players}
                     participantPlayerId={ownPlayerId}
+                    allowTeamBan={isHost}
                     onBanComplete={handleBanComplete}
                   />
                 </CollapsibleSection>
@@ -308,6 +374,7 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
                   onToggle={() => setShowMap(!showMap)}
                 >
                   <div className="space-y-3">
+                    {isHost && (
                     <div className="flex items-center justify-center gap-2">
                       <Button
                         variant={mapMode === "random" ? "default" : "outline"}
@@ -324,7 +391,8 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
                         投票
                       </Button>
                     </div>
-                    {mapMode === "random" ? (
+                    )}
+                    {isHost && mapMode === "random" ? (
                       <MapRandom onMapSelected={handleMapSelected} />
                     ) : (
                       <MapVote
@@ -341,6 +409,7 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
                 <CollapsibleSection
                   title="エージェントピック"
                   open={showPick}
+                  hidden={!isHost}
                   onToggle={() => setShowPick(!showPick)}
                 >
                   <div className="space-y-3">
@@ -358,8 +427,8 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
                     )}
                     <PickResult
                       players={players}
-                      teamA={teamResult.teamA}
-                      teamB={teamResult.teamB}
+                      teamA={visibleTeamResult.teamA}
+                      teamB={visibleTeamResult.teamB}
                       bannedAgentIds={bannedAgentIds}
                       mapId={selectedMap?.id ?? null}
                       tierData={Object.keys(tierData).length > 0 ? tierData : null}
@@ -369,7 +438,7 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
               </div>
             )}
 
-            <div className="flex justify-center">
+            <div className={isHost ? "flex justify-center" : "hidden"}>
               <Button variant="ghost" size="sm" onClick={handleResetToPlayer}>
                 リセット（プレイヤー登録に戻る）
               </Button>
@@ -385,14 +454,18 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
 function CollapsibleSection({
   title,
   open,
+  hidden = false,
   onToggle,
   children,
 }: {
   title: string;
   open: boolean;
+  hidden?: boolean;
   onToggle: () => void;
   children: React.ReactNode;
 }) {
+  if (hidden) return null;
+
   return (
     <div className="rounded-lg border border-val-border overflow-hidden">
       <button

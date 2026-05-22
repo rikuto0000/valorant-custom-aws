@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { extractRoomId } from "@/lib/utils";
+import { rememberRoomHost } from "@/hooks/use-participant-identity";
 
 export default function Home() {
   const router = useRouter();
@@ -25,7 +26,9 @@ export default function Home() {
       const res = await fetch("/api/rooms", { method: "POST" });
       if (!res.ok) throw new Error("ルーム作成に失敗しました");
       const json = await res.json();
-      router.push(`/room/${json.data.id}`);
+      const roomId = json.data.id as string;
+      rememberRoomHost(roomId);
+      router.push(`/room/${roomId}`);
     } catch {
       setIsCreating(false);
     }

@@ -19,6 +19,7 @@ export interface BanPanelProps {
   roomId: string;
   players: Player[];
   participantPlayerId: string | null;
+  allowTeamBan?: boolean;
   onBanComplete: (bannedIds: string[]) => void;
 }
 
@@ -26,9 +27,11 @@ export function BanPanel({
   roomId,
   players,
   participantPlayerId,
+  allowTeamBan = true,
   onBanComplete,
 }: BanPanelProps) {
-  const [banMode, setBanMode] = useState<BanMode>('team');
+  const [banMode, setBanMode] = useState<BanMode>(allowTeamBan ? 'team' : 'vote');
+  const activeBanMode: BanMode = allowTeamBan ? banMode : 'vote';
   const {
     votes: roomVotes,
     loading: votesLoading,
@@ -156,8 +159,10 @@ export function BanPanel({
         {/* Mode toggle */}
         <div className="flex gap-2">
           <Button
-            variant={banMode === 'team' ? 'default' : 'outline'}
+              variant={activeBanMode === 'team' ? 'default' : 'outline'}
             size="sm"
+            className={allowTeamBan ? undefined : 'hidden'}
+            disabled={!allowTeamBan}
             onClick={() => {
               setBanMode('team');
               setTeamBanPhase('teamA');
@@ -169,7 +174,7 @@ export function BanPanel({
             チームBAN
           </Button>
           <Button
-            variant={banMode === 'vote' ? 'default' : 'outline'}
+            variant={activeBanMode === 'vote' ? 'default' : 'outline'}
             size="sm"
             onClick={() => {
               setBanMode('vote');
@@ -185,7 +190,7 @@ export function BanPanel({
         </div>
 
         {/* Team BAN mode */}
-        {banMode === 'team' && (
+        {activeBanMode === 'team' && (
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Badge variant={teamBanPhase === 'teamA' ? 'default' : 'secondary'}>
@@ -215,7 +220,7 @@ export function BanPanel({
         )}
 
         {/* Vote BAN mode */}
-        {banMode === 'vote' && (
+        {activeBanMode === 'vote' && (
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Badge>投票済み {roomVotes.length}/{requiredVoteCount}</Badge>
