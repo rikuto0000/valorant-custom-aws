@@ -62,25 +62,24 @@ export function PickResult({
   useEffect(() => {
     if (!animating) return;
 
-    if (animationFrame >= ANIMATION_FRAMES) {
-      setAnimating(false);
-      setPicks(finalPicksRef.current);
-      setDisplayPicks(finalPicksRef.current);
-      return;
-    }
-
-    // Show random agents during animation
-    const bannedSet = new Set(bannedAgentIds);
-    const available = AGENTS.filter((a) => !bannedSet.has(a.id));
-    const randomPicks: AgentPickResult[] = players.map((p) => ({
-      playerId: p.id,
-      agent: available[Math.floor(Math.random() * available.length)],
-    }));
-    setDisplayPicks(randomPicks);
-
     const timer = setTimeout(() => {
+      if (animationFrame >= ANIMATION_FRAMES) {
+        setAnimating(false);
+        setPicks(finalPicksRef.current);
+        setDisplayPicks(finalPicksRef.current);
+        return;
+      }
+
+      // Show random agents during animation
+      const bannedSet = new Set(bannedAgentIds);
+      const available = AGENTS.filter((a) => !bannedSet.has(a.id));
+      const randomPicks: AgentPickResult[] = players.map((p) => ({
+        playerId: p.id,
+        agent: available[Math.floor(Math.random() * available.length)],
+      }));
+      setDisplayPicks(randomPicks);
       setAnimationFrame((f) => f + 1);
-    }, ANIMATION_INTERVAL_MS);
+    }, animationFrame >= ANIMATION_FRAMES ? 0 : ANIMATION_INTERVAL_MS);
 
     return () => clearTimeout(timer);
   }, [animating, animationFrame, players, bannedAgentIds]);

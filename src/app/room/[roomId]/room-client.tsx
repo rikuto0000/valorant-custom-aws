@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import type { Room, Player, PlayerInput, TeamResult, MapData } from "@/lib/types";
 import { useRoom } from "@/hooks/use-room";
-import { useAppSync } from "@/hooks/use-appsync";
+import { useRoomRealtime } from "@/hooks/use-room-realtime";
 import { useAgentTier } from "@/hooks/use-agent-tier";
 import { PlayerForm } from "@/components/room/player-form";
 import { PlayerList } from "@/components/room/player-list";
@@ -58,7 +58,7 @@ export function RoomClient({ room, initialPlayers }: RoomClientProps) {
   const [copied, setCopied] = useState(false);
 
   const { tierData } = useAgentTier();
-  useAppSync(room.id, () => fetchRoom(room.id));
+  useRoomRealtime(room.id, () => fetchRoom(room.id));
 
   async function handleCopyUrl() {
     try {

@@ -1,16 +1,17 @@
 import type { IDataStore } from './interface';
 import { DemoStore } from './demo-store';
+import { hasSupabaseServerConfig } from '../supabase/server';
 
 let store: IDataStore | null = null;
 
 export function getStore(): IDataStore {
   if (store) return store;
 
-  if (process.env.APP_AWS_REGION && process.env.DYNAMODB_ROOMS_TABLE_NAME) {
-    // Dynamic require to avoid importing AWS SDK when not needed
+  if (hasSupabaseServerConfig()) {
+    // Dynamic require keeps the local demo mode build-safe when env vars are absent.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { DynamoDBStore } = require('./dynamodb-store');
-    store = new DynamoDBStore();
+    const { SupabaseStore } = require('./supabase-store');
+    store = new SupabaseStore();
   } else {
     store = DemoStore.getInstance();
   }

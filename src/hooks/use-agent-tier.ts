@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import type { TierRank, MapTierData } from "@/lib/types";
 import { loadTierData, saveTierData } from "@/lib/algorithms/tier-utils";
 
@@ -22,12 +22,13 @@ interface UseAgentTierReturn {
  * Validates: Requirements 18.2, 18.3
  */
 export function useAgentTier(): UseAgentTierReturn {
-  const [tierData, setTierData] = useState<MapTierData>({});
+  const [tierData, setTierData] = useState<MapTierData>(() => {
+    if (typeof window === "undefined") {
+      return {};
+    }
 
-  // マウント時に localStorage から読み込み
-  useEffect(() => {
-    setTierData(loadTierData());
-  }, []);
+    return loadTierData();
+  });
 
   const setTier = useCallback((mapId: string, agentId: string, tier: TierRank) => {
     setTierData((prev) => {
